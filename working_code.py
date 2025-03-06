@@ -5,42 +5,35 @@ from firebase_admin import credentials, firestore
 from flask import Flask, request, jsonify
 import json
 import time
+from google.cloud import secretmanager
 
-# Initialize Flask App
 app = Flask(__name__)
 
-# Load Firebase credentials securely from Google Secret Manager
-from google.cloud import secretmanager
 
 client = secretmanager.SecretManagerServiceClient()
 secret_name = "projects/pura-452821/secrets/firebase-admin-sdk/versions/latest"
 response = client.access_secret_version(request={"name": secret_name})
 firebase_creds = json.loads(response.payload.data.decode("UTF-8"))
 
-# Initialize Firebase Admin SDK
 cred = credentials.Certificate(firebase_creds)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# USDA & Open Food Facts API Details
 USDA_API_KEY = "API_KEY"
 USDA_LIST_URL = "https://api.nal.usda.gov/fdc/v1/foods/list"
 USDA_BULK_URL = "https://api.nal.usda.gov/fdc/v1/foods"
 OFF_API_URL = "https://world.openfoodfacts.org/api/v2/product/"
 
-### 🔥 Function: Check Firestore Before Adding
 def is_fdcid_in_firestore(fdc_id):
     doc_ref = db.collection("pura_data_pipeline").document(str(fdc_id)).get()
     return doc_ref.exists
 
-### 🔥 Function: Query Firestore for Barcode
 def query_firestore_barcode(barcode):
     docs = db.collection("pura_data_pipeline").where("barcode", "==", barcode).stream()
     for doc in docs:
         return doc.to_dict()
     return None
 
-### 🔥 Function: Fetch USDA Food Data (Bulk)
 def fetch_usda_data(page_size=100, page_number=1):
     params = {
         "api_key": USDA_API_KEY,
@@ -51,14 +44,12 @@ def fetch_usda_data(page_size=100, page_number=1):
     response = requests.get(USDA_LIST_URL, params=params)
     return response.json() if response.status_code == 200 else []
 
-### 🔥 Function: Fetch USDA Bulk Details
 def fetch_usda_details_bulk(fdc_ids):
     params = {"api_key": USDA_API_KEY}
     payload = {"fdcIds": fdc_ids}
     response = requests.post(USDA_BULK_URL, params=params, json=payload)
     return response.json() if response.status_code == 200 else []
 
-### 🔥 Function: Fetch Open Food Facts (OFF) Data
 def fetch_off_data(barcode):
     response = requests.get(f"{OFF_API_URL}{barcode}.json")
     if response.status_code == 200:
@@ -75,7 +66,6 @@ def fetch_off_data(barcode):
             }
     return None
 
-### 🔥 Function: Transform Food Data for Firestore
 def transform_food_data(food, source="USDA"):
     if source == "USDA":
         return {
@@ -99,7 +89,6 @@ def transform_food_data(food, source="USDA"):
             "foodNutrients": [{ "name": key, "amount": value } for key, value in nutriments.items() if isinstance(value, (int, float))]
         }
 
-### 🔥 Function: Batch Upload to Firestore
 def upload_batch_to_firestore(food_items):
     batch = db.batch()
     for food_data in food_items:
@@ -109,7 +98,6 @@ def upload_batch_to_firestore(food_items):
     batch.commit()
     print(f"✅ Batch upload completed - {len(food_items)} items added.")
 
-### 🔥 Cloud Function: USDA + OFF Ingestion
 @app.route("/", methods=["POST"])
 def usda_off_ingestion():
     total_ingested = 0
@@ -131,7 +119,6 @@ def usda_off_ingestion():
 
     return jsonify({"status": "success", "message": f"USDA ingestion completed. {total_ingested} items added."})
 
-### 🔥 Cloud Function: Barcode Lookup
 @app.route("/lookup", methods=["POST"])
 def lookup_food():
     data = request.get_json()
