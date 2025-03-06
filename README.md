@@ -124,5 +124,3 @@ gcloud firestore indexes composite list
 ✅ **Scales to process 400K+ items**  
 ✅ **Automates data sync every 5 minutes**  
 
-Would you like to add **error handling & retries** for failed requests? 🚀🔥
-
